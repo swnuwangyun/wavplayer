@@ -55,6 +55,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        resultsList.add("Build Time: ${BuildConfig.BUILD_TIME}")
         setContent {
             WavplayerTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
