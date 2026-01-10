@@ -18,7 +18,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.example.wavplayer.ui.theme.WavplayerTheme
 import java.io.File
@@ -69,7 +71,11 @@ class MainActivity : ComponentActivity() {
                         Spacer(modifier = Modifier.height(8.dp))
                         LazyColumn(modifier = Modifier.fillMaxSize()) {
                             items(resultsList) { res ->
-                                Text(res)
+                                Text(
+                                    text = res,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 12.sp
+                                )
                             }
                         }
                     }
