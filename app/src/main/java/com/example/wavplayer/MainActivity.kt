@@ -106,10 +106,13 @@ class MainActivity : ComponentActivity() {
     private fun startAutoTest() {
         thread {
             fileList.forEach { path ->
+                runOnUiThread {
+                    resultsList.add("Testing: ${File(path).name}")
+                }
                 repeat(3) { round ->
                     val result = playWavAndMeasure(path)
                     runOnUiThread {
-                        resultsList.add("${File(path).name} 第${round + 1}次:\n$result")
+                        resultsList.add("${round + 1} $result")
                     }
                 }
             }
@@ -188,7 +191,7 @@ class MainActivity : ComponentActivity() {
         val ppm = (actualSec - expectedSec) / expectedSec * 1_000_000
 
         return String.format(
-            "播放耗时:%.3fs 理论时长:%.3fs 时钟偏差:%.2f ppm",
+            "act:%.3fs set:%.3fs diff:%.2fppm",
             actualSec, expectedSec, ppm
         )
     }
