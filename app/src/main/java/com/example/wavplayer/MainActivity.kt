@@ -201,7 +201,7 @@ class MainActivity : ComponentActivity() {
             if (startTime==0L) {
                 audioTrack.play()
                 while (audioTrack.playbackHeadPosition == 0) {
-                    Thread.sleep(1)
+                    //Thread.sleep(1)
                 }
                 startTime = System.nanoTime()
             }
@@ -274,7 +274,7 @@ class MainActivity : ComponentActivity() {
         audioTrack.play()
 
         while (audioTrack.playbackHeadPosition == 0) {
-            Thread.sleep(1)
+           //Thread.sleep(1)
         }
 
         val startTime = System.nanoTime()
