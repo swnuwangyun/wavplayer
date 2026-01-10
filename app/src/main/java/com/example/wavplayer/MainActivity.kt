@@ -182,7 +182,7 @@ class MainActivity : ComponentActivity() {
 
         val channelConfig = if (channels == 1) AudioFormat.CHANNEL_OUT_MONO else AudioFormat.CHANNEL_OUT_STEREO
         val audioFormat = if (bitsPerSample == 8) AudioFormat.ENCODING_PCM_8BIT else AudioFormat.ENCODING_PCM_16BIT
-        val bufferSize = AudioTrack.getMinBufferSize(sampleRate, channelConfig, audioFormat)
+        val bufferSize = 2*AudioTrack.getMinBufferSize(sampleRate, channelConfig, audioFormat)
 
         val audioTrack = AudioTrack(
             AudioManager.STREAM_MUSIC,
@@ -193,12 +193,18 @@ class MainActivity : ComponentActivity() {
             AudioTrack.MODE_STREAM
         )
 
-        val startTime = System.nanoTime()
-        audioTrack.play()
+        var startTime: Long = 0
         val audioBuffer = ByteArray(bufferSize)
         var readBytes: Int
         while (fis.read(audioBuffer).also { readBytes = it } > 0) {
             audioTrack.write(audioBuffer, 0, readBytes)
+            if (startTime==0L) {
+                audioTrack.play()
+                while (audioTrack.playbackHeadPosition == 0) {
+                    Thread.sleep(1)
+                }
+                startTime = System.nanoTime()
+            }
         }
         while (audioTrack.playbackHeadPosition < totalSamples) {
             Thread.sleep(1)
