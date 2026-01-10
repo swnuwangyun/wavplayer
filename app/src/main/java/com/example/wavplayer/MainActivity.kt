@@ -8,6 +8,7 @@ import android.media.AudioManager
 import android.media.AudioTrack
 import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -32,7 +33,6 @@ import kotlin.concurrent.thread
 class MainActivity : ComponentActivity() {
 
     private var resultsList = mutableStateListOf<String>()
-
     private val fileList = listOf(
         "/storage/emulated/0/Download/test_60s.wav",
         "/storage/emulated/0/Download/test_5min.wav",
@@ -40,12 +40,15 @@ class MainActivity : ComponentActivity() {
         "/storage/emulated/0/Download/test_20min.wav"
     )
 
-    private var filePathPending: String = ""
+    private var pendingAction: (() -> Unit)? = null
 
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
             if (isGranted) {
-                startAutoTest()
+                pendingAction?.invoke()
+                pendingAction = null
+            } else {
+                Toast.makeText(this, "File access denied", Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -61,11 +64,18 @@ class MainActivity : ComponentActivity() {
                             .padding(16.dp)
                     ) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(onClick = { checkAndRequestPermission() }) {
-                                Text("开始测试")
+                            Button(onClick = {
+                                checkAndRequestPermission { startAutoTestStream() }
+                            }) {
+                                Text("StreamTest")
+                            }
+                            Button(onClick = {
+                                checkAndRequestPermission { startAutoTestStatic() }
+                            }) {
+                                Text("StaticTest")
                             }
                             Button(onClick = { resultsList.clear() }) {
-                                Text("清空结果")
+                                Text("Clear")
                             }
                         }
                         Spacer(modifier = Modifier.height(8.dp))
@@ -84,17 +94,17 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun checkAndRequestPermission() {
-        filePathPending = ""
+    private fun checkAndRequestPermission(runAfter: () -> Unit) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(
                     this,
                     Manifest.permission.READ_MEDIA_AUDIO
                 ) != PackageManager.PERMISSION_GRANTED
             ) {
+                pendingAction = runAfter
                 permissionLauncher.launch(Manifest.permission.READ_MEDIA_AUDIO)
             } else {
-                startAutoTest()
+                runAfter()
             }
         } else {
             if (ContextCompat.checkSelfPermission(
@@ -102,36 +112,45 @@ class MainActivity : ComponentActivity() {
                     Manifest.permission.READ_EXTERNAL_STORAGE
                 ) != PackageManager.PERMISSION_GRANTED
             ) {
+                pendingAction = runAfter
                 permissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
             } else {
-                startAutoTest()
+                runAfter()
             }
         }
     }
 
-    private fun startAutoTest() {
+    private fun startAutoTestStream() {
         thread {
             fileList.forEach { path ->
-                runOnUiThread {
-                    resultsList.add("Testing: ${File(path).name}")
+                runOnUiThread { resultsList.add("Stream testing: ${File(path).name}") }
+                repeat(5) { round ->
+                    val result = playWavStream(path)
+                    runOnUiThread { resultsList.add("${round + 1} $result") }
                 }
-                repeat(3) { round ->
-                    val result = playWavAndMeasure(path)
-                    runOnUiThread {
-                        resultsList.add("${round + 1} $result")
-                    }
+            }
+        }
+    }
+
+    private fun startAutoTestStatic() {
+        thread {
+            fileList.forEach { path ->
+                runOnUiThread { resultsList.add("Static testing: ${File(path).name}") }
+                repeat(5) { round ->
+                    val result = playWavStatic(path)
+                    runOnUiThread { resultsList.add("${round + 1} $result") }
                 }
             }
         }
     }
 
     @SuppressLint("DefaultLocale")
-    private fun playWavAndMeasure(filePath: String): String {
+    private fun playWavStream(filePath: String): String {
         val fis = FileInputStream(File(filePath))
         val buffer4 = ByteArray(4)
-        fis.read(buffer4) // RIFF
-        fis.read(buffer4) // chunkSize
-        fis.read(buffer4) // WAVE
+        fis.read(buffer4)
+        fis.read(buffer4)
+        fis.read(buffer4)
 
         var channels = 0
         var sampleRate = 0
@@ -174,31 +193,96 @@ class MainActivity : ComponentActivity() {
             AudioTrack.MODE_STREAM
         )
 
-        val startTime = System.currentTimeMillis()
-
+        val startTime = System.nanoTime()
         audioTrack.play()
         val audioBuffer = ByteArray(bufferSize)
         var readBytes: Int
         while (fis.read(audioBuffer).also { readBytes = it } > 0) {
             audioTrack.write(audioBuffer, 0, readBytes)
         }
-
         while (audioTrack.playbackHeadPosition < totalSamples) {
             Thread.sleep(1)
         }
-
-        val endTime = System.currentTimeMillis()
+        val endTime = System.nanoTime()
 
         audioTrack.stop()
         audioTrack.release()
         fis.close()
 
-        val actualSec = (endTime - startTime) / 1000.0
+        val actualSec = (endTime - startTime) / 1_000_000_000.0
         val ppm = (actualSec - expectedSec) / expectedSec * 1_000_000
+        return String.format("act:%.3fs set:%.3fs diff:%.2fppm", actualSec, expectedSec, ppm)
+    }
 
-        return String.format(
-            "act:%.3fs set:%.3fs diff:%.2fppm",
-            actualSec, expectedSec, ppm
+    @SuppressLint("DefaultLocale")
+    private fun playWavStatic(filePath: String): String {
+        val fis = FileInputStream(File(filePath))
+        val buffer4 = ByteArray(4)
+        fis.read(buffer4)
+        fis.read(buffer4)
+        fis.read(buffer4)
+
+        var channels = 0
+        var sampleRate = 0
+        var bitsPerSample = 0
+        var dataSize = 0
+        while (true) {
+            val chunkIdBytes = ByteArray(4)
+            fis.read(chunkIdBytes)
+            val chunkId = String(chunkIdBytes)
+            fis.read(buffer4)
+            val chunkSize = ByteBuffer.wrap(buffer4).order(ByteOrder.LITTLE_ENDIAN).int
+            if (chunkId == "fmt ") {
+                val fmtData = ByteArray(chunkSize)
+                fis.read(fmtData)
+                channels = ByteBuffer.wrap(fmtData, 2, 2).order(ByteOrder.LITTLE_ENDIAN).short.toInt()
+                sampleRate = ByteBuffer.wrap(fmtData, 4, 4).order(ByteOrder.LITTLE_ENDIAN).int
+                bitsPerSample = ByteBuffer.wrap(fmtData, 14, 2).order(ByteOrder.LITTLE_ENDIAN).short.toInt()
+            } else if (chunkId == "data") {
+                dataSize = chunkSize
+                break
+            } else {
+                fis.skip(chunkSize.toLong())
+            }
+        }
+
+        val totalSamples = dataSize / (bitsPerSample / 8) / channels
+        val expectedSec = totalSamples.toDouble() / sampleRate.toDouble()
+
+        val channelConfig = if (channels == 1) AudioFormat.CHANNEL_OUT_MONO else AudioFormat.CHANNEL_OUT_STEREO
+        val audioFormat = if (bitsPerSample == 8) AudioFormat.ENCODING_PCM_8BIT else AudioFormat.ENCODING_PCM_16BIT
+
+        val pcmData = ByteArray(dataSize)
+        fis.read(pcmData)
+        fis.close()
+
+        val audioTrack = AudioTrack(
+            AudioManager.STREAM_MUSIC,
+            sampleRate,
+            channelConfig,
+            audioFormat,
+            pcmData.size,
+            AudioTrack.MODE_STATIC
         )
+        audioTrack.write(pcmData, 0, pcmData.size)
+        audioTrack.play()
+
+        while (audioTrack.playbackHeadPosition == 0) {
+            Thread.sleep(1)
+        }
+
+        val startTime = System.nanoTime()
+
+        while (audioTrack.playbackHeadPosition < totalSamples) {
+            Thread.sleep(1)
+        }
+        val endTime = System.nanoTime()
+
+        audioTrack.stop()
+        audioTrack.release()
+
+        val actualSec = (endTime - startTime) / 1_000_000_000.0
+        val ppm = (actualSec - expectedSec) / expectedSec * 1_000_000
+        return String.format("act:%.3fs set:%.3fs diff:%.2fppm", actualSec, expectedSec, ppm)
     }
 }
