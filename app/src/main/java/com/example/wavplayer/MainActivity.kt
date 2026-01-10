@@ -1,26 +1,23 @@
 package com.example.wavplayer
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
 import android.os.Build
 import android.os.Bundle
-import android.app.AlertDialog
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.example.wavplayer.ui.theme.WavplayerTheme
@@ -32,12 +29,21 @@ import kotlin.concurrent.thread
 
 class MainActivity : ComponentActivity() {
 
+    private var resultsList = mutableStateListOf<String>()
+
+    private val fileList = listOf(
+        "/storage/emulated/0/Download/test_60s.wav",
+        "/storage/emulated/0/Download/test_5min.wav",
+        "/storage/emulated/0/Download/test_10min.wav",
+        "/storage/emulated/0/Download/test_20min.wav"
+    )
+
     private var filePathPending: String = ""
 
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
             if (isGranted) {
-                showResult(filePathPending)
+                startAutoTest()
             }
         }
 
@@ -45,37 +51,26 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            var result by remember { mutableStateOf("") }
             WavplayerTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     Column(
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
                         modifier = Modifier
                             .padding(innerPadding)
                             .padding(16.dp)
                     ) {
-                        Button(onClick = {
-                            checkAndRequestPermission("/storage/emulated/0/Download/test_60s.wav")
-                        }) {
-                            Text("播放并测时60s")
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = { checkAndRequestPermission() }) {
+                                Text("开始测试")
+                            }
+                            Button(onClick = { resultsList.clear() }) {
+                                Text("清空结果")
+                            }
                         }
-                        Button(onClick = {
-                            checkAndRequestPermission("/storage/emulated/0/Download/test_5min.wav")
-                        }) {
-                            Text("播放并测时5min")
-                        }
-                        Button(onClick = {
-                            checkAndRequestPermission("/storage/emulated/0/Download/test_10min.wav")
-                        }) {
-                            Text("播放并测时10min")
-                        }
-                        Button(onClick = {
-                            checkAndRequestPermission("/storage/emulated/0/Download/test_20min.wav")
-                        }) {
-                            Text("播放并测时20min")
-                        }
-                        if (result.isNotEmpty()) {
-                            Text(result)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        LazyColumn(modifier = Modifier.fillMaxSize()) {
+                            items(resultsList) { res ->
+                                Text(res)
+                            }
                         }
                     }
                 }
@@ -83,8 +78,8 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun checkAndRequestPermission(filePath: String) {
-        filePathPending = filePath
+    private fun checkAndRequestPermission() {
+        filePathPending = ""
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(
                     this,
@@ -93,7 +88,7 @@ class MainActivity : ComponentActivity() {
             ) {
                 permissionLauncher.launch(Manifest.permission.READ_MEDIA_AUDIO)
             } else {
-                showResult(filePath)
+                startAutoTest()
             }
         } else {
             if (ContextCompat.checkSelfPermission(
@@ -103,22 +98,37 @@ class MainActivity : ComponentActivity() {
             ) {
                 permissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
             } else {
-                showResult(filePath)
+                startAutoTest()
             }
         }
     }
 
+    private fun startAutoTest() {
+        thread {
+            fileList.forEach { path ->
+                repeat(3) { round ->
+                    val result = playWavAndMeasure(path)
+                    runOnUiThread {
+                        resultsList.add("${File(path).name} 第${round + 1}次:\n$result")
+                    }
+                }
+            }
+        }
+    }
+
+    @SuppressLint("DefaultLocale")
     private fun playWavAndMeasure(filePath: String): String {
         val fis = FileInputStream(File(filePath))
         val buffer4 = ByteArray(4)
-        val buffer8 = ByteArray(8)
-        fis.read(buffer4)
-        fis.read(buffer4)
-        fis.read(buffer4)
+        fis.read(buffer4) // RIFF
+        fis.read(buffer4) // chunkSize
+        fis.read(buffer4) // WAVE
+
         var channels = 0
         var sampleRate = 0
         var bitsPerSample = 0
         var dataSize = 0
+
         while (true) {
             val chunkIdBytes = ByteArray(4)
             fis.read(chunkIdBytes)
@@ -138,11 +148,14 @@ class MainActivity : ComponentActivity() {
                 fis.skip(chunkSize.toLong())
             }
         }
+
         val totalSamples = dataSize / (bitsPerSample / 8) / channels
         val expectedSec = totalSamples.toDouble() / sampleRate.toDouble()
+
         val channelConfig = if (channels == 1) AudioFormat.CHANNEL_OUT_MONO else AudioFormat.CHANNEL_OUT_STEREO
         val audioFormat = if (bitsPerSample == 8) AudioFormat.ENCODING_PCM_8BIT else AudioFormat.ENCODING_PCM_16BIT
         val bufferSize = AudioTrack.getMinBufferSize(sampleRate, channelConfig, audioFormat)
+
         val audioTrack = AudioTrack(
             AudioManager.STREAM_MUSIC,
             sampleRate,
@@ -151,51 +164,32 @@ class MainActivity : ComponentActivity() {
             bufferSize,
             AudioTrack.MODE_STREAM
         )
+
         val startTime = System.currentTimeMillis()
+
         audioTrack.play()
         val audioBuffer = ByteArray(bufferSize)
         var readBytes: Int
         while (fis.read(audioBuffer).also { readBytes = it } > 0) {
             audioTrack.write(audioBuffer, 0, readBytes)
         }
+
+        while (audioTrack.playbackHeadPosition < totalSamples) {
+            Thread.sleep(1)
+        }
+
+        val endTime = System.currentTimeMillis()
+
         audioTrack.stop()
         audioTrack.release()
         fis.close()
-        val endTime = System.currentTimeMillis()
+
         val actualSec = (endTime - startTime) / 1000.0
         val ppm = (actualSec - expectedSec) / expectedSec * 1_000_000
+
         return String.format(
-            "实际播放耗时: %.3f 秒\n理论时长: %.3f 秒\n时钟偏差: %.2f ppm",
+            "播放耗时:%.3fs 理论时长:%.3fs 时钟偏差:%.2f ppm",
             actualSec, expectedSec, ppm
         )
-    }
-
-    private fun showResult(filePath: String) {
-        thread {
-            val result = playWavAndMeasure(filePath)
-            runOnUiThread {
-                AlertDialog.Builder(this)
-                    .setTitle("播放统计结果")
-                    .setMessage(result)
-                    .setPositiveButton("确定", null)
-                    .show()
-            }
-        }
-    }
-}
-
-@Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
-}
-
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    WavplayerTheme {
-        Greeting("Android")
     }
 }
