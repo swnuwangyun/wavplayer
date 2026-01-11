@@ -1,4 +1,4 @@
-## 问题描述
+## 通过播放音频文件的实际耗时，计算音频时钟误差
 
 1. 在 `Download` 目录下放置如下文件：
     - `/storage/emulated/0/Download/test_60s.wav`
