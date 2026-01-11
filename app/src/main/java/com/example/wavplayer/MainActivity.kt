@@ -127,6 +127,7 @@ class MainActivity : ComponentActivity() {
                 runOnUiThread { resultsList.add("Stream testing: ${File(path).name}") }
                 repeat(5) { round ->
                     val result = playWavStream(path)
+                    System.gc();
                     runOnUiThread { resultsList.add("${round + 1} $result") }
                 }
             }
@@ -139,6 +140,7 @@ class MainActivity : ComponentActivity() {
                 runOnUiThread { resultsList.add("Static testing: ${File(path).name}") }
                 repeat(5) { round ->
                     val result = playWavStatic(path)
+                    System.gc();
                     runOnUiThread { resultsList.add("${round + 1} $result") }
                 }
             }
