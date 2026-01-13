@@ -3,6 +3,9 @@ package com.example.wavplayer
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.pm.PackageManager
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
@@ -185,7 +188,7 @@ class MainActivity : ComponentActivity() {
 
         val channelConfig = if (channels == 1) AudioFormat.CHANNEL_OUT_MONO else AudioFormat.CHANNEL_OUT_STEREO
         val audioFormat = if (bitsPerSample == 8) AudioFormat.ENCODING_PCM_8BIT else AudioFormat.ENCODING_PCM_16BIT
-        val bufferSize = 2*AudioTrack.getMinBufferSize(sampleRate, channelConfig, audioFormat)
+        val bufferSize = AudioTrack.getMinBufferSize(sampleRate, channelConfig, audioFormat)
 
         val audioTrack = AudioTrack(
             AudioManager.STREAM_MUSIC,
@@ -199,8 +202,17 @@ class MainActivity : ComponentActivity() {
         var startTime: Long = 0
         val audioBuffer = ByteArray(bufferSize)
         var readBytes: Int
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault())
         while (fis.read(audioBuffer).also { readBytes = it } > 0) {
+            val writeStart = System.nanoTime()
+
             audioTrack.write(audioBuffer, 0, readBytes)
+
+            val writeEnd = System.nanoTime()
+            val costMs = (writeEnd - writeStart) / 1_000_000
+            val currentTimeStr = dateFormat.format(Date())
+            println("[$currentTimeStr] buffersize: $bufferSize write cost: $costMs")
+
             if (startTime==0L) {
                 audioTrack.play()
                 while (audioTrack.playbackHeadPosition == 0) {
