@@ -3,6 +3,7 @@ package com.example.wavplayer
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.pm.PackageManager
+import android.media.AudioAttributes
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -187,17 +188,26 @@ class MainActivity : ComponentActivity() {
         val expectedSec = totalSamples.toDouble() / sampleRate.toDouble()
 
         val channelConfig = if (channels == 1) AudioFormat.CHANNEL_OUT_MONO else AudioFormat.CHANNEL_OUT_STEREO
-        val audioFormat = if (bitsPerSample == 8) AudioFormat.ENCODING_PCM_8BIT else AudioFormat.ENCODING_PCM_16BIT
-        val bufferSize = AudioTrack.getMinBufferSize(sampleRate, channelConfig, audioFormat)
+        val audioEncoding = if (bitsPerSample == 8) AudioFormat.ENCODING_PCM_8BIT else AudioFormat.ENCODING_PCM_16BIT
+        val bufferSize = AudioTrack.getMinBufferSize(sampleRate, channelConfig, audioEncoding)
 
-        val audioTrack = AudioTrack(
-            AudioManager.STREAM_MUSIC,
-            sampleRate,
-            channelConfig,
-            audioFormat,
-            bufferSize,
-            AudioTrack.MODE_STREAM
-        )
+        val format = AudioFormat.Builder()
+            .setSampleRate(sampleRate)
+            .setEncoding(audioEncoding)
+            .setChannelMask(channelConfig)
+            .build()
+
+        val attributes = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_MEDIA)
+            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+            .build()
+
+        val audioTrack = AudioTrack.Builder()
+            .setAudioAttributes(attributes)
+            .setAudioFormat(format)
+            .setBufferSizeInBytes(bufferSize)
+            .setTransferMode(AudioTrack.MODE_STREAM)
+            .build()
 
         var startTime: Long = 0
         val audioBuffer = ByteArray(bufferSize)
