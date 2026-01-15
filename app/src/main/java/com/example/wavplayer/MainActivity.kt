@@ -38,7 +38,7 @@ class MainActivity : ComponentActivity() {
 
     private var resultsList = mutableStateListOf<String>()
     private val fileList = listOf(
-        "/storage/emulated/0/Download/test_60s.wav",
+        "/storage/emulated/0/Download/test_60s_24000_1ch.wav",
         "/storage/emulated/0/Download/test_5min.wav",
         "/storage/emulated/0/Download/test_10min.wav",
         "/storage/emulated/0/Download/test_20min.wav"
@@ -189,7 +189,7 @@ class MainActivity : ComponentActivity() {
 
         val channelConfig = if (channels == 1) AudioFormat.CHANNEL_OUT_MONO else AudioFormat.CHANNEL_OUT_STEREO
         val audioEncoding = if (bitsPerSample == 8) AudioFormat.ENCODING_PCM_8BIT else AudioFormat.ENCODING_PCM_16BIT
-        val bufferSize = AudioTrack.getMinBufferSize(sampleRate, channelConfig, audioEncoding)
+        val bufferSize = AudioTrack.getMinBufferSize(sampleRate, channelConfig, audioEncoding);
 
         val format = AudioFormat.Builder()
             .setSampleRate(sampleRate)
@@ -200,6 +200,7 @@ class MainActivity : ComponentActivity() {
         val attributes = AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_MEDIA)
             .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+            //.setFlags(AudioAttributes.FLAG_LOW_LATENCY)
             .build()
 
         val audioTrack = AudioTrack.Builder()
@@ -216,12 +217,14 @@ class MainActivity : ComponentActivity() {
         while (fis.read(audioBuffer).also { readBytes = it } > 0) {
             val writeStart = System.nanoTime()
 
-            audioTrack.write(audioBuffer, 0, readBytes)
+            val written = audioTrack.write(audioBuffer, 0, readBytes)
 
             val writeEnd = System.nanoTime()
             val costMs = (writeEnd - writeStart) / 1_000_000
             val currentTimeStr = dateFormat.format(Date())
-            println("[$currentTimeStr] buffersize: $bufferSize write cost: $costMs")
+            val bufferSizeActual = audioTrack.bufferSizeInFrames*2*channels;
+            val bufferCapacity = audioTrack.bufferCapacityInFrames*2*channels;
+            println("[$currentTimeStr] samplerate:$sampleRate channel:$channels bits:$bitsPerSample minbuffersize:$bufferSize buffer:$bufferSizeActual-$bufferCapacity written:$written cost:$costMs")
 
             if (startTime==0L) {
                 audioTrack.play()
