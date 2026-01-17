@@ -222,9 +222,11 @@ class MainActivity : ComponentActivity() {
             val writeEnd = System.nanoTime()
             val costMs = (writeEnd - writeStart) / 1_000_000
             val currentTimeStr = dateFormat.format(Date())
-            val bufferSizeActual = audioTrack.bufferSizeInFrames*2*channels;
-            val bufferCapacity = audioTrack.bufferCapacityInFrames*2*channels;
-            println("[$currentTimeStr] samplerate:$sampleRate channel:$channels bits:$bitsPerSample minbuffersize:$bufferSize buffer:$bufferSizeActual-$bufferCapacity written:$written cost:$costMs")
+            val bufferSizeFrame = audioTrack.bufferSizeInFrames;
+            val bufferSizeByte = audioTrack.bufferSizeInFrames*2*channels;
+            val bufferDuration = audioTrack.bufferSizeInFrames * 1000.0 / audioTrack.sampleRate;
+            val underrun = audioTrack.underrunCount
+            println("[$currentTimeStr] samplerate:$sampleRate channel:$channels bits:$bitsPerSample minbuffersize:$bufferSize buffer:$bufferSizeByte-$bufferSizeFrame-$bufferDuration ms written:$written cost:$costMs underrun:$underrun")
 
             if (startTime==0L) {
                 audioTrack.play()
