@@ -38,7 +38,7 @@ class MainActivity : ComponentActivity() {
 
     private var resultsList = mutableStateListOf<String>()
     private val fileList = listOf(
-        "/storage/emulated/0/Download/test_60s_24000_1ch.wav",
+        "/storage/emulated/0/Download/test_60s.wav",
         "/storage/emulated/0/Download/test_5min.wav",
         "/storage/emulated/0/Download/test_10min.wav",
         "/storage/emulated/0/Download/test_20min.wav"
@@ -209,6 +209,7 @@ class MainActivity : ComponentActivity() {
             .setBufferSizeInBytes(bufferSize)
             .setTransferMode(AudioTrack.MODE_STREAM)
             .build()
+        audioTrack.setPlaybackRate((sampleRate * 1).toInt())
 
         var startTime: Long = 0
         val audioBuffer = ByteArray(bufferSize)
